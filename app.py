@@ -1,3 +1,10 @@
+from flask import Flask, request, jsonify
+import requests
+import time
+
+app = Flask(__name__)  # ✅ Cette ligne doit venir AVANT le @app.route
+
+
 @app.route('/create-vm-connection', methods=['POST'])
 def create_vm_connection():
     try:
