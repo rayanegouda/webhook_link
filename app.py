@@ -4,6 +4,10 @@ import time
 
 app = Flask(__name__)  # ✅ Cette ligne doit venir AVANT le @app.route
 
+# 🔧 URLs de vos services backend
+CREATE_VM_URL = "https://webhook-ec2-api.onrender.com/create-vm"  # À adapter
+CREATE_CONNECTION_URL = "https://webhook-api-new-vm.onrender.com/create-connection"  # À adapter
+
 
 @app.route('/create-vm-connection', methods=['POST'])
 def create_vm_connection():
