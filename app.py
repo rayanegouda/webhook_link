@@ -38,10 +38,10 @@ def create_vm_connection():
             return jsonify({"error": "VM creation failed", "details": vm_response.text}), 500
 
         vm_data = vm_response.json()
-        private_ip = vm_data.get("private_ip")
+        public_ip = vm_data.get("public_ip")
         private_key = vm_data.get("pem_key")
 
-        if not private_ip or not private_key:
+        if not public_ip or not private_key:
             print("[ERROR] IP ou clé privée manquante")
             return jsonify({"error": "Missing VM info"}), 500
 
@@ -51,10 +51,10 @@ def create_vm_connection():
         print("[INFO] Connexion Guacamole en cours...")
 
         connection_payload = {
-            "ip": private_ip,
+            "ip": public_ip,
             "private_key": private_key,
             "connection_protocol": "ssh",
-            "connection_name": f"SSH - {private_ip}"
+            "connection_name": f"SSH - {public_ip}"
         }
 
         connection_response = requests.post(CREATE_CONNECTION_URL, json=connection_payload)
