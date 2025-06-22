@@ -62,10 +62,11 @@ def create_vm_connection():
         print("[INFO] Statut Guacamole :", connection_response.status_code)
         print("[INFO] Réponse Guacamole :", connection_response.text)
 
-        if connection_response.status_code != 200:
+        if connection_response.status_code not in [200, 201]:
             return jsonify({"error": "Connection creation failed", "details": connection_response.text}), 500
 
         print("[SUCCESS] Connexion établie")
+		#return jsonify({"status": "success","vm_details": vm_data,"guacamole_connection": connection_response.json()}), 200
         return jsonify(connection_response.json())
 
     except Exception as e:
