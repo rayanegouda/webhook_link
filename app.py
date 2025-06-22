@@ -57,7 +57,7 @@ def create_vm_connection():
             "connection_name": f"SSH - {public_ip}"
         }
 
-        connection_response = requests.post(CREATE_CONNECTION_URL, json=connection_payload)
+        connection_response = requests.post(CREATE_CONNECTION_URL, json=connection_payload, timeout=30)
 
         print("[INFO] Statut Guacamole :", connection_response.status_code)
         print("[INFO] Réponse Guacamole :", connection_response.text)
