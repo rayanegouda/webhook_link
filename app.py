@@ -1,76 +1,69 @@
 from flask import Flask, request, jsonify
 import requests
-import time
+import os
 
-app = Flask(__name__)  # ✅ Cette ligne doit venir AVANT le @app.route
+app = Flask(__name__)
 
-# 🔧 URLs de vos services backend
-CREATE_VM_URL = "https://webhook-ec2-api.onrender.com/create-vm"  # À adapter
-CREATE_CONNECTION_URL = "https://webhook-api-new-vm.onrender.com/create-connection"  # À adapter
+# URLs des autres services (à personnaliser si besoin)
+CREATE_VM_URL = "https://webhook-ec2-api.onrender.com/create-vm"
+CREATE_USER_URL = "https://webservice-guacservice.onrender.com/create-user"
+CREATE_CONNECTION_URL = "https://webhook-api-new-vm.onrender.com/create-connection"
 
-
-@app.route('/create-vm-connection', methods=['POST'])
-def create_vm_connection():
+@app.route("/create-full-vm", methods=["POST"])
+def create_full_vm():
     try:
-        data = request.json
-        print("[INFO] Requête reçue :", data)
-
+        data = request.get_json()
         ami = data.get("ami")
         instance_type = data.get("instance_type")
         username = data.get("username")
 
-        if not ami or not instance_type or not username:
-            print("[ERROR] Champs manquants")
-            return jsonify({"error": "Missing required fields"}), 400
+        if not all([ami, instance_type, username]):
+            return jsonify({"error": "Missing ami, instance_type or username"}), 400
 
-        print("[INFO] Création de la VM en cours...")
-
-        vm_response = requests.post(CREATE_VM_URL, json={
+        # Étape 1 - Créer la VM
+        vm_payload = {
             "ami": ami,
             "instance_type": instance_type,
             "username": username
-        })
-
-        print("[INFO] Statut VM :", vm_response.status_code)
-        print("[INFO] Réponse VM :", vm_response.text)
+        }
+        vm_response = requests.post(CREATE_VM_URL, json=vm_payload)
+        vm_data = vm_response.json()
 
         if vm_response.status_code != 200:
-            return jsonify({"error": "VM creation failed", "details": vm_response.text}), 500
+            return jsonify({"error": "EC2 creation failed", "details": vm_data}), 500
 
-        vm_data = vm_response.json()
-        public_ip = vm_data.get("public_ip")
-        private_key = vm_data.get("pem_key")
+        public_ip = vm_data["public_ip"]
+        private_key = vm_data["pem_key"]
 
-        if not public_ip or not private_key:
-            print("[ERROR] IP ou clé privée manquante")
-            return jsonify({"error": "Missing VM info"}), 500
+        # Étape 2 - Créer l'utilisateur Guacamole
+        user_payload = {"email": username}
+        user_response = requests.post(CREATE_USER_URL, json=user_payload)
+        user_data = user_response.json()
 
-        print("[INFO] Délai d’attente avant connexion Guacamole...")
-        time.sleep(5)
+        if user_response.status_code != 200 or not user_data.get("username"):
+            return jsonify({"error": "Guacamole user creation failed", "details": user_data}), 500
 
-        print("[INFO] Connexion Guacamole en cours...")
+        guac_username = user_data["username"]
 
-        connection_payload = {
+        # Étape 3 - Créer la connexion Guacamole
+        conn_payload = {
             "ip": public_ip,
             "private_key": private_key,
             "connection_protocol": "ssh",
-            "connection_name": f"SSH - {public_ip}"
+            "connection_name": f"SSH - {public_ip}",
+            "username": guac_username
         }
+        conn_response = requests.post(CREATE_CONNECTION_URL, json=conn_payload)
+        conn_data = conn_response.json()
 
-        connection_response = requests.post(CREATE_CONNECTION_URL, json=connection_payload, timeout=30)
+        if conn_response.status_code != 201:
+            return jsonify({"error": "Guacamole connection failed", "details": conn_data}), 500
 
-        print("[INFO] Statut Guacamole :", connection_response.status_code)
-        print("[INFO] Réponse Guacamole :", connection_response.text)
-
-        if connection_response.status_code not in [200, 201]:
-            return jsonify({"error": "Connection creation failed", "details": connection_response.text}), 500
-
-        print("[SUCCESS] Connexion établie")
-		#return jsonify({"status": "success","vm_details": vm_data,"guacamole_connection": connection_response.json()}), 200
-        return jsonify(connection_response.json())
+        return jsonify(conn_data)
 
     except Exception as e:
-        import traceback
-        print("[EXCEPTION]", str(e))
-        traceback.print_exc()
-        return jsonify({"error": "Unexpected error occurred"}), 500
+        return jsonify({"error": str(e)}), 500
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
