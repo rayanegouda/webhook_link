@@ -1,27 +1,47 @@
 from flask import Flask, request, jsonify
 import requests
-import os
 
 app = Flask(__name__)
 
-# URLs des autres services
+# URLs des services
+RESOLVE_USER_VM_URL = "https://webhook-product-ami.onrender.com/resolve-user-vm"
 CREATE_VM_URL = "https://webhook-ec2-api.onrender.com/create-vm"
 CREATE_USER_URL = "https://webservice-guacservice.onrender.com/create-user"
 CREATE_CONNECTION_URL = "https://webhook-api-new-vm.onrender.com/create-connection"
 FINAL_LOGIN_URL = "https://webhook-api-generate-url.onrender.com/api/final-login"
 
-@app.route("/create-full-vm", methods=["POST"])
-def create_full_vm():
+
+@app.route("/create-and-redirect", methods=["GET"])
+def create_and_redirect():
     try:
-        data = request.get_json()
-        ami = data.get("ami")
-        instance_type = data.get("instance_type")
-        username = data.get("username")
+        # Récupérer les paramètres GET
+        product_id = request.args.get("product_id")
+        email = request.args.get("email", "")
+        ipaddress = request.args.get("ipaddress", "")
+
+        if not product_id:
+            return jsonify({"error": "Missing product_id"}), 400
+
+        # Étape 0 : Résoudre les infos de VM à partir du produit
+        resolve_params = {
+            "product_id": product_id,
+            "email": email,
+            "ipaddress": ipaddress
+        }
+        resolve_response = requests.get(RESOLVE_USER_VM_URL, params=resolve_params)
+        resolve_data = resolve_response.json()
+
+        if resolve_response.status_code != 200:
+            return jsonify({"error": "User/VM resolution failed", "details": resolve_data}), 500
+
+        ami = resolve_data.get("ami")
+        instance_type = resolve_data.get("instance_type")
+        username = resolve_data.get("username")
 
         if not all([ami, instance_type, username]):
-            return jsonify({"error": "Missing ami, instance_type or username"}), 400
+            return jsonify({"error": "Missing data from resolve service"}), 500
 
-        # Étape 1 - Créer la VM
+        # Étape 1 - Créer la VM EC2
         vm_payload = {
             "ami": ami,
             "instance_type": instance_type,
@@ -62,7 +82,7 @@ def create_full_vm():
 
         connection_id = conn_data["connection_id"]
 
-        # Étape 4 - Générer l'URL finale
+        # Étape 4 - Générer l'URL de connexion finale
         login_payload = {
             "username": guac_username,
             "connection_id": str(connection_id)
@@ -73,6 +93,7 @@ def create_full_vm():
         if login_response.status_code != 200 or not login_data.get("redirect_url"):
             return jsonify({"error": "Final login URL generation failed", "details": login_data}), 500
 
+        # Succès : renvoyer l'URL finale
         return jsonify({
             "username": guac_username,
             "connection_id": connection_id,
@@ -81,6 +102,7 @@ def create_full_vm():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)
